@@ -57,3 +57,9 @@ nestedDiv = (
     </div>
   </div>
 )
+
+  const z=$42vas31$
+  const escapeChars = `
+  it doesn\`t matter
+  `
+  const anotherTry = '\''

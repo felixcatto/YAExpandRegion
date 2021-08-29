@@ -32,12 +32,9 @@ def getNextRegion(text, selection, options = {}):
   closeBracketChars = ['}', ']', ')']
   stringChars = ['`', '"', '\'']
   capturingStringSymbol = '`'
-  tagStartSymbol = '<'
-  tagEndSymbol = '>'
   braketIndexes = []
   lastStringIndex = None
   lastStringChar = None
-  tags = []
 
   for i in range(0, len(text)):
     char = text[i]
@@ -77,42 +74,6 @@ def getNextRegion(text, selection, options = {}):
       regionsForExpand.append(sublime.Region(lastOpenTokenIndex, i + 1))
       if not isEmptyRegion:
         regionsForExpand.append(sublime.Region(lastOpenTokenIndex + 1, i))
-    elif char == tagStartSymbol:
-      textPart = text[i:]
-      lastTag = tags and tags[-1]
-      isTagAhead = re.match(r'<(\w+(?:\.\w+)?).*?>.*?</\1>', textPart, re.S)
-      isSingleTagAhead = re.match(r'<\w+[^<]*?/>', textPart, re.S)
-      isFragmentTagAhead = re.match(r'<>.*?</>', textPart, re.S)
-      isTagTailAhead = lastTag and not lastTag['tagTailStart'] and re.match(f'</{lastTag["tagName"]}>', textPart, re.S)
-      if isTagAhead or isFragmentTagAhead:
-        tagName = isTagAhead.group(1) if isTagAhead else ''
-        tag = {
-          'tagName': tagName,
-          'tagHeadStart': i,
-          'tagHeadEnd': None,
-          'tagTailStart': None,
-          'tagTailEnd': None,
-        }
-        tags.append(tag)
-      elif isSingleTagAhead:
-        tag = {
-          'tagHeadStart': i,
-          'tagTailEnd': i + isSingleTagAhead.end(0) - 1,
-        }
-        regionsForExpand.append(sublime.Region(tag['tagHeadStart'], tag['tagTailEnd'] + 1))
-      elif isTagTailAhead:
-        lastTag['tagTailStart'] = i
-    elif char == tagEndSymbol:
-      lastTag = tags and tags[-1]
-      if not lastTag: continue
-
-      if not lastTag['tagHeadEnd']:
-        lastTag['tagHeadEnd'] = i
-      elif lastTag['tagHeadEnd'] and lastTag['tagTailStart']:
-        lastTag['tagTailEnd'] = i
-        regionsForExpand.append(sublime.Region(lastTag['tagHeadStart'], lastTag['tagTailEnd'] + 1))
-        regionsForExpand.append(sublime.Region(lastTag['tagHeadEnd'] + 1, lastTag['tagTailStart']))
-        tags = tags[0:-1]
 
   return getClosestContainingRegion(regionsForExpand, selection)
 

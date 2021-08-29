@@ -62,4 +62,4 @@ nestedDiv = (
   const escapeChars = `
   it doesn\`t matter
   `
-  const anotherTry = '\''
+  const anotherTry = '\'' || '\\'

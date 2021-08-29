@@ -160,10 +160,14 @@ class TestFunctions(TestCase):
     self.assertEqual(region, sublime.Region(1053, 1062))
 
   def test_23(self):
-    """match escape `"""
+    """ignore escaped char \` """
     region, regionsForExpand = getNextRegion(fixture, sublime.Region(1098, 1098))
     self.assertEqual(region, sublime.Region(1086, 1110))
   def test_24(self):
-    """match escape ' """
+    """ignore escaped char \' """
     region, regionsForExpand = getNextRegion(fixture, sublime.Region(1134, 1134))
     self.assertEqual(region, sublime.Region(1134, 1136))
+  def test_25(self):
+    """ignore escaped slash \\ """
+    region, regionsForExpand = getNextRegion(fixture, sublime.Region(1142, 1142))
+    self.assertEqual(region, sublime.Region(1142, 1144))

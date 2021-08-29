@@ -6,14 +6,6 @@ from functools import reduce
 
 cachedRegionsForExpand = None
 
-def getClosestContainingRegion(regionsForExpand, selection):
-  containingRegions = list(filter(lambda el: el.contains(selection) and el != selection, regionsForExpand))
-  if not containingRegions:
-    return [None, regionsForExpand]
-
-  closestContainingRegion = reduce(lambda acc, el: el if el.size() < acc.size() else acc, containingRegions)
-  return [closestContainingRegion, regionsForExpand]
-
 def getNextRegion(text, selection, options = {}):
   cachedRegionsForExpand = options.get("cachedRegionsForExpand") or None
 
@@ -40,7 +32,6 @@ def getNextRegion(text, selection, options = {}):
   closeBracketChars = ['}', ']', ')']
   stringChars = ['`', '"', '\'']
   capturingStringSymbol = '`'
-  escapeSymbol = '\\'
   tagStartSymbol = '<'
   tagEndSymbol = '>'
   braketIndexes = []
@@ -54,8 +45,7 @@ def getNextRegion(text, selection, options = {}):
 
     if isInNonCapturingString:
       # end for simpleStr
-      isPreviousEscapeSymbol = i != 0 and text[i - 1] == escapeSymbol
-      if isPreviousEscapeSymbol: continue
+      if isCharEscaped(text, i): continue
       if char == lastStringChar:
         isEmptyRegion = lastStringIndex + 1 == i
         regionsForExpand.append(sublime.Region(lastStringIndex, i + 1))
@@ -66,8 +56,7 @@ def getNextRegion(text, selection, options = {}):
       continue    
 
     if char in stringChars:
-      isPreviousEscapeSymbol = i != 0 and text[i - 1] == escapeSymbol
-      if isPreviousEscapeSymbol: continue
+      if isCharEscaped(text, i): continue
       if not lastStringIndex:
         # start for simpleStr and capturingStr
         lastStringIndex = i
@@ -127,10 +116,33 @@ def getNextRegion(text, selection, options = {}):
 
   return getClosestContainingRegion(regionsForExpand, selection)
 
+def isCharEscaped(text, i):
+  escapeSymbol = '\\'
+  if i == 0 : return False
+  if text[i - 1] != escapeSymbol:
+    return False
+  elif i == 1 and text[i - 1] == escapeSymbol:
+    return True
+  else:
+    isFirstEscapeSymbol = text[i - 1] == escapeSymbol
+    isSecondEscapeSymbol = text[i - 2] == escapeSymbol
+    if isFirstEscapeSymbol and not isSecondEscapeSymbol:
+      return True
+    else:
+      return False
+
+def getClosestContainingRegion(regionsForExpand, selection):
+  containingRegions = list(filter(lambda el: el.contains(selection) and el != selection, regionsForExpand))
+  if not containingRegions:
+    return [None, regionsForExpand]
+
+  closestContainingRegion = reduce(lambda acc, el: el if el.size() < acc.size() else acc, containingRegions)
+  return [closestContainingRegion, regionsForExpand]
+
 def getPosition(view):
   return view.sel()[0].begin()
 
-class ExampleCommand(sublime_plugin.TextCommand):
+class YaexpandRegionCommand(sublime_plugin.TextCommand):
   def run(self, edit):
     global cachedRegionsForExpand
     view = self.view
@@ -155,6 +167,4 @@ class ExampleEventListener(sublime_plugin.ViewEventListener):
     if cachedRegionsForExpand:
       cachedRegionsForExpand = None
   # def on_selection_modified(self):
-  #   view = self.view
-  #   selection = view.sel()[0]
-  #   print(selection)
+  #   print(self.view.sel()[0])

@@ -5,6 +5,19 @@ from functools import reduce
 
 
 cachedRegionsForExpand = None
+initialSelection = None
+# After we set 'initialSelection', we run selectionAdd and then 'selection_modified' event happens
+# The problem is we also need to clear 'initialSelection' whenever this event happens
+# So we set 'initialSelection', and then immediately clear it :face-palm:
+# And to prevent it we introduce this clumsy variables
+canSkipModifiedEvent = True
+initialSelectionStatus = 'notSet' # 'notSet' | 'setAndUnsetDisabled' | 'set'
+
+def resetInitialSelection():
+  global initialSelection, initialSelectionStatus, canSkipModifiedEvent
+  initialSelection = None
+  initialSelectionStatus = 'notSet'
+  canSkipModifiedEvent = True
 
 def getNextRegion(text, selection, options = {}):
   cachedRegionsForExpand = options.get("cachedRegionsForExpand") or None
@@ -26,7 +39,7 @@ def getNextRegion(text, selection, options = {}):
       wordRegion = sublime.Region(min(wordBoundaries), max(wordBoundaries) + 1);
       return [wordRegion, regionsForExpand]
   if cachedRegionsForExpand:
-    return getClosestContainingRegion(regionsForExpand, selection)
+    return getNextContainingRegion(regionsForExpand, selection)
 
   openBracketChars = ['{', '[', '(']
   closeBracketChars = ['}', ']', ')']
@@ -50,7 +63,7 @@ def getNextRegion(text, selection, options = {}):
           regionsForExpand.append(sublime.Region(lastStringIndex + 1, i))
         lastStringIndex = None
         lastStringChar = None
-      continue    
+      continue
 
     if char in stringChars:
       if isCharEscaped(text, i): continue
@@ -75,7 +88,7 @@ def getNextRegion(text, selection, options = {}):
       if not isEmptyRegion:
         regionsForExpand.append(sublime.Region(lastOpenTokenIndex + 1, i))
 
-  return getClosestContainingRegion(regionsForExpand, selection)
+  return getNextContainingRegion(regionsForExpand, selection)
 
 def isCharEscaped(text, i):
   escapeSymbol = '\\'
@@ -92,40 +105,70 @@ def isCharEscaped(text, i):
     else:
       return False
 
-def getClosestContainingRegion(regionsForExpand, selection):
+def getNextContainingRegion(regionsForExpand, selection):
   containingRegions = list(filter(lambda el: el.contains(selection) and el != selection, regionsForExpand))
   if not containingRegions:
     return [None, regionsForExpand]
 
-  closestContainingRegion = reduce(lambda acc, el: el if el.size() < acc.size() else acc, containingRegions)
-  return [closestContainingRegion, regionsForExpand]
+  nextContainingRegion = reduce(lambda acc, el: el if el.size() < acc.size() else acc, containingRegions)
+  return [nextContainingRegion, regionsForExpand]
 
-def getPosition(view):
-  return view.sel()[0].begin()
+def getPreviousRegion(regionsForExpand, selection, initialSelection):
+  filterFn = lambda el: selection.contains(el) and el != selection and el.contains(initialSelection)
+  containingRegions = list(filter(filterFn, regionsForExpand))
+  if not containingRegions:
+    return None
+
+  nextChildRegion = reduce(lambda acc, el: el if el.size() > acc.size() else acc, containingRegions)
+  return nextChildRegion
 
 class YaexpandRegionCommand(sublime_plugin.TextCommand):
   def run(self, edit):
-    global cachedRegionsForExpand
+    global cachedRegionsForExpand, initialSelection, initialSelectionStatus, canSkipModifiedEvent
     view = self.view
     selection = view.sel()[0]
     text = view.substr(sublime.Region(0, view.size()))
-    closestContainingRegion, regionsForExpand = getNextRegion(text, selection, {
+    nextContainingRegion, regionsForExpand = getNextRegion(text, selection, {
       'cachedRegionsForExpand': cachedRegionsForExpand,
     })
     cachedRegionsForExpand = regionsForExpand
-    if not closestContainingRegion:
-      sublime.status_message('Can\'t expand')
-      return
-    view.sel().add(closestContainingRegion)
+    if not nextContainingRegion:
+      return sublime.status_message('Can\'t expand')
+
+    initialSelectionStatus = 'setAndUnsetDisabled'
+    if initialSelection is None:
+      initialSelection = selection
+      canSkipModifiedEvent = False
+    view.sel().add(nextContainingRegion)
+
+class YaexpandUndoCommand(sublime_plugin.TextCommand):
+  def run(self, edit):
+    global cachedRegionsForExpand, initialSelection, initialSelectionStatus
+    view = self.view
+    selection = view.sel()[0]
+    nextChildRegion = getPreviousRegion(cachedRegionsForExpand, selection, initialSelection)
+    if not nextChildRegion:
+      return sublime.status_message('Can\'t undo')
+    initialSelectionStatus = 'setAndUnsetDisabled'
+    view.sel().clear()
+    view.sel().add(nextChildRegion)
 
 class ExampleEventListener(sublime_plugin.ViewEventListener):
   def on_modified(self):
     global cachedRegionsForExpand
     if cachedRegionsForExpand:
       cachedRegionsForExpand = None
+      resetInitialSelection()
   def on_deactivated(self):
     global cachedRegionsForExpand
     if cachedRegionsForExpand:
       cachedRegionsForExpand = None
-  # def on_selection_modified(self):
-  #   print(self.view.sel()[0])
+      resetInitialSelection()
+  def on_selection_modified(self):
+    # print(self.view.sel()[0])
+    global initialSelectionStatus, canSkipModifiedEvent
+    if canSkipModifiedEvent: return
+    if initialSelectionStatus == 'setAndUnsetDisabled':
+      initialSelectionStatus = 'set'
+    elif initialSelectionStatus == 'set':
+      resetInitialSelection()

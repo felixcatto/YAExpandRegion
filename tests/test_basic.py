@@ -8,31 +8,7 @@ import yaExpandRegion
 reload(yaExpandRegion)
 
 getNextRegion = yaExpandRegion.getNextRegion
-getPreviousRegion = yaExpandRegion.getPreviousRegion
 fixture = None
-fixtureRegionsForExpand = [
-  sublime.Region(10, 22),
-  sublime.Region(11, 21),
-  sublime.Region(31, 33),
-  sublime.Region(47, 49),
-  sublime.Region(59, 62),
-  sublime.Region(60, 61),
-  sublime.Region(80, 85),
-  sublime.Region(81, 84),
-  sublime.Region(79, 86),
-  sublime.Region(38, 90),
-  sublime.Region(37, 91),
-  sublime.Region(100, 102),
-  sublime.Region(124, 129),
-  sublime.Region(125, 128),
-  sublime.Region(123, 130),
-  sublime.Region(148, 168),
-  sublime.Region(149, 167),
-  sublime.Region(147, 169),
-  sublime.Region(106, 174),
-  sublime.Region(107, 173),
-  sublime.Region(1, 176)
-]
 
 class TestFunctions(TestCase):
   @classmethod
@@ -97,13 +73,6 @@ class TestFunctions(TestCase):
       'cachedRegionsForExpand': regionsForExpand,
     })
     self.assertEqual(region, sublime.Region(390,434))
-
-  def test_11(self):
-    """undo region expansion"""
-    region = getPreviousRegion(fixtureRegionsForExpand, sublime.Region(38,90), sublime.Region(60))
-    self.assertEqual(region, sublime.Region(59,62))
-    region = getPreviousRegion(fixtureRegionsForExpand, sublime.Region(59,62), sublime.Region(60))
-    self.assertEqual(region, sublime.Region(60,61))
 
   def test_21(self):
     """match fullWord"""

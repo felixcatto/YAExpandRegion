@@ -5,19 +5,6 @@ from functools import reduce
 
 
 cachedRegionsForExpand = None
-initialSelection = None
-# After we set 'initialSelection', we run selectionAdd and then 'selection_modified' event happens
-# The problem is we also need to clear 'initialSelection' whenever this event happens
-# So we set 'initialSelection', and then immediately clear it :face-palm:
-# And to prevent it we introduce this clumsy variables
-canSkipModifiedEvent = True
-initialSelectionStatus = 'notSet' # 'notSet' | 'setAndUnsetDisabled' | 'set'
-
-def resetInitialSelection():
-  global initialSelection, initialSelectionStatus, canSkipModifiedEvent
-  initialSelection = None
-  initialSelectionStatus = 'notSet'
-  canSkipModifiedEvent = True
 
 def getNextRegion(text, selection, options = {}):
   cachedRegionsForExpand = options.get("cachedRegionsForExpand") or None
@@ -113,18 +100,9 @@ def getNextContainingRegion(regionsForExpand, selection):
   nextContainingRegion = reduce(lambda acc, el: el if el.size() < acc.size() else acc, containingRegions)
   return [nextContainingRegion, regionsForExpand]
 
-def getPreviousRegion(regionsForExpand, selection, initialSelection):
-  filterFn = lambda el: selection.contains(el) and el != selection and el.contains(initialSelection)
-  containingRegions = list(filter(filterFn, regionsForExpand))
-  if not containingRegions:
-    return None
-
-  nextChildRegion = reduce(lambda acc, el: el if el.size() > acc.size() else acc, containingRegions)
-  return nextChildRegion
-
 class YaexpandRegionCommand(sublime_plugin.TextCommand):
   def run(self, edit):
-    global cachedRegionsForExpand, initialSelection, initialSelectionStatus, canSkipModifiedEvent
+    global cachedRegionsForExpand
     view = self.view
     selection = view.sel()[0]
     text = view.substr(sublime.Region(0, view.size()))
@@ -134,41 +112,18 @@ class YaexpandRegionCommand(sublime_plugin.TextCommand):
     cachedRegionsForExpand = regionsForExpand
     if not nextContainingRegion:
       return sublime.status_message('Can\'t expand')
-
-    initialSelectionStatus = 'setAndUnsetDisabled'
-    if initialSelection is None:
-      initialSelection = selection
-      canSkipModifiedEvent = False
-    view.sel().add(nextContainingRegion)
-
-class YaexpandUndoCommand(sublime_plugin.TextCommand):
-  def run(self, edit):
-    global cachedRegionsForExpand, initialSelection, initialSelectionStatus
-    view = self.view
-    selection = view.sel()[0]
-    nextChildRegion = getPreviousRegion(cachedRegionsForExpand, selection, initialSelection)
-    if not nextChildRegion:
-      return sublime.status_message('Can\'t undo')
-    initialSelectionStatus = 'setAndUnsetDisabled'
-    view.sel().clear()
-    view.sel().add(nextChildRegion)
+    addFn = lambda: view.sel().add(nextContainingRegion)
+    addFn()
+    sublime.set_timeout(addFn, 0) # hack to make soft undo works
 
 class ExampleEventListener(sublime_plugin.ViewEventListener):
   def on_modified(self):
     global cachedRegionsForExpand
     if cachedRegionsForExpand:
       cachedRegionsForExpand = None
-      resetInitialSelection()
   def on_deactivated(self):
     global cachedRegionsForExpand
     if cachedRegionsForExpand:
       cachedRegionsForExpand = None
-      resetInitialSelection()
-  def on_selection_modified(self):
-    # print(self.view.sel()[0])
-    global initialSelectionStatus, canSkipModifiedEvent
-    if canSkipModifiedEvent: return
-    if initialSelectionStatus == 'setAndUnsetDisabled':
-      initialSelectionStatus = 'set'
-    elif initialSelectionStatus == 'set':
-      resetInitialSelection()
+  # def on_selection_modified(self):
+  #   print(self.view.sel()[0])

@@ -6,8 +6,15 @@ from functools import reduce
 
 cachedRegionsForExpand = None
 
+def some(array, filterFn):
+  for el in array:
+    if filterFn(el):
+      return True
+  return False
+
 def getNextRegion(text, selection, options = {}):
   cachedRegionsForExpand = options.get("cachedRegionsForExpand") or None
+  commentsRegions = options.get("commentsRegions") or []
 
   regionsForExpand = cachedRegionsForExpand or []
   shouldExpandToWord = selection.begin() == selection.end()
@@ -39,6 +46,9 @@ def getNextRegion(text, selection, options = {}):
   for i in range(0, len(text)):
     char = text[i]
     isInNonCapturingString = lastStringIndex and lastStringChar != capturingStringSymbol
+    isInComment = some(commentsRegions, lambda el: el.contains(i))
+    if isInComment:
+      continue
 
     if isInNonCapturingString:
       # end for simpleStr
@@ -106,8 +116,11 @@ class YaexpandRegionCommand(sublime_plugin.TextCommand):
     view = self.view
     selection = view.sel()[0]
     text = view.substr(sublime.Region(0, view.size()))
+    mapFn = lambda region: sublime.Region(region.begin(), region.end() - 1)
+    commentsRegions = list(map(mapFn, view.find_by_selector('comment')))
     nextContainingRegion, regionsForExpand = getNextRegion(text, selection, {
       'cachedRegionsForExpand': cachedRegionsForExpand,
+      'commentsRegions': commentsRegions,
     })
     cachedRegionsForExpand = regionsForExpand
     if not nextContainingRegion:

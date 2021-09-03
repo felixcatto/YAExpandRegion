@@ -9,13 +9,17 @@ reload(yaExpandRegion)
 
 getNextRegion = yaExpandRegion.getNextRegion
 fixture = None
+fixtureComments = None
 
 class TestFunctions(TestCase):
   @classmethod
   def setUpClass(cls):
-    global fixture
+    global fixture, fixtureComments
     file = open(f'{currentDir}/fixture.js', 'r')
     fixture = file.read()
+    file.close()
+    file = open(f'{currentDir}/fixtureComments.js', 'r')
+    fixtureComments = file.read()
     file.close()
 
   def test_1(self):
@@ -73,6 +77,13 @@ class TestFunctions(TestCase):
       'cachedRegionsForExpand': regionsForExpand,
     })
     self.assertEqual(region, sublime.Region(390,434))
+
+  def test_11(self):
+    """ignore chars ('... in comments"""
+    region, regionsForExpand = getNextRegion(fixtureComments, sublime.Region(48, 49), {
+      'commentsRegions': [sublime.Region(0, 21)]
+    })
+    self.assertEqual(region, sublime.Region(37, 52))
 
   def test_21(self):
     """match fullWord"""

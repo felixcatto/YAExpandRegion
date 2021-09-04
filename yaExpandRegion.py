@@ -6,6 +6,45 @@ from functools import reduce
 
 cachedRegionsForExpand = None
 
+class YaexpandRegionCommand(sublime_plugin.TextCommand):
+  def run(self, edit):
+    global cachedRegionsForExpand
+    view = self.view
+    selection = view.sel()[0]
+    text = view.substr(sublime.Region(0, view.size()))
+    mapFn = lambda region: sublime.Region(region.begin(), region.end() - 1)
+    commentsRegions = list(map(mapFn, view.find_by_selector('comment')))
+
+    nextContainingRegions = []
+    for selection in view.sel():
+      nextContainingRegion, regionsForExpand = getNextRegion(text, selection, {
+        'cachedRegionsForExpand': cachedRegionsForExpand,
+        'commentsRegions': commentsRegions,
+      })
+      cachedRegionsForExpand = regionsForExpand
+      if nextContainingRegion:
+        nextContainingRegions.append(nextContainingRegion)
+
+    if not nextContainingRegions:
+      return sublime.status_message('Can\'t expand')
+    def addRegions():
+      for region in nextContainingRegions:
+        view.sel().add(region)
+    addRegions()
+    sublime.set_timeout(addRegions, 0) # hack to make soft undo works
+
+class ExampleEventListener(sublime_plugin.ViewEventListener):
+  def on_modified(self):
+    global cachedRegionsForExpand
+    if cachedRegionsForExpand:
+      cachedRegionsForExpand = None
+  def on_deactivated(self):
+    global cachedRegionsForExpand
+    if cachedRegionsForExpand:
+      cachedRegionsForExpand = None
+  # def on_selection_modified(self):
+  #   print(self.view.sel()[0])
+
 def some(array, filterFn):
   for el in array:
     if filterFn(el):
@@ -35,6 +74,11 @@ def getNextRegion(text, selection, options = {}):
   if cachedRegionsForExpand:
     return getNextContainingRegion(regionsForExpand, selection)
 
+  regionsForExpand = getRegionsForExpand(text, commentsRegions)
+  return getNextContainingRegion(regionsForExpand, selection)
+
+def getRegionsForExpand(text, commentsRegions):
+  regionsForExpand = cachedRegionsForExpand or []
   openBracketChars = ['{', '[', '(']
   closeBracketChars = ['}', ']', ')']
   stringChars = ['`', '"', '\'']
@@ -85,7 +129,7 @@ def getNextRegion(text, selection, options = {}):
       if not isEmptyRegion:
         regionsForExpand.append(sublime.Region(lastOpenTokenIndex + 1, i))
 
-  return getNextContainingRegion(regionsForExpand, selection)
+  return regionsForExpand
 
 def isCharEscaped(text, i):
   escapeSymbol = '\\'
@@ -109,34 +153,3 @@ def getNextContainingRegion(regionsForExpand, selection):
 
   nextContainingRegion = reduce(lambda acc, el: el if el.size() < acc.size() else acc, containingRegions)
   return [nextContainingRegion, regionsForExpand]
-
-class YaexpandRegionCommand(sublime_plugin.TextCommand):
-  def run(self, edit):
-    global cachedRegionsForExpand
-    view = self.view
-    selection = view.sel()[0]
-    text = view.substr(sublime.Region(0, view.size()))
-    mapFn = lambda region: sublime.Region(region.begin(), region.end() - 1)
-    commentsRegions = list(map(mapFn, view.find_by_selector('comment')))
-    nextContainingRegion, regionsForExpand = getNextRegion(text, selection, {
-      'cachedRegionsForExpand': cachedRegionsForExpand,
-      'commentsRegions': commentsRegions,
-    })
-    cachedRegionsForExpand = regionsForExpand
-    if not nextContainingRegion:
-      return sublime.status_message('Can\'t expand')
-    addFn = lambda: view.sel().add(nextContainingRegion)
-    addFn()
-    sublime.set_timeout(addFn, 0) # hack to make soft undo works
-
-class ExampleEventListener(sublime_plugin.ViewEventListener):
-  def on_modified(self):
-    global cachedRegionsForExpand
-    if cachedRegionsForExpand:
-      cachedRegionsForExpand = None
-  def on_deactivated(self):
-    global cachedRegionsForExpand
-    if cachedRegionsForExpand:
-      cachedRegionsForExpand = None
-  # def on_selection_modified(self):
-  #   print(self.view.sel()[0])
